@@ -11,7 +11,7 @@ app.use(express.urlencoded({ extended: true }));
 let server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: "http://localhost:5173", methods: ["GET", "POST"] },
+  cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
 let rooms = {};
@@ -75,4 +75,7 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(8080, () => console.log("server started on port 8080"));
+const PORT =
+  process.env.PORT || 3000;
+
+server.listen(PORT, () => console.log("server started on port 3000"));
