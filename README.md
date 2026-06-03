@@ -121,7 +121,7 @@ project-root/
 ## Clone Repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/tanmay-mangale/shareEzy.git
 ```
 
 ---
