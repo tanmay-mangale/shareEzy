@@ -23,7 +23,14 @@ const JoinRoom = () => {
 
   const peer = useRef(
     new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        {
+          urls: "turn:openrelay.metered.ca:80",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+      ],
     }),
   );
 
@@ -67,9 +74,7 @@ const JoinRoom = () => {
             ]);
 
             console.log("receiving:", currentFile.name);
-          }
-
-          else if (parsedData.type === "end") {
+          } else if (parsedData.type === "end") {
             const blob = new Blob(currentFile.chunks, {
               type: currentFile.mimeType,
             });
@@ -91,9 +96,7 @@ const JoinRoom = () => {
 
             console.log("received:", currentFile.name);
           }
-        }
-
-        else {
+        } else {
           currentFile.chunks.push(event.data);
 
           currentFile.receivedBytes += event.data.byteLength;
