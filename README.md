@@ -63,9 +63,7 @@ Share files directly between devices without uploading them to a central server.
 
 # 🧱 Architecture
 
-```md
 ![Architecture Diagram](./frontend/architecture/architecture.png)
-```
 
 ---
 
