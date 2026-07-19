@@ -12,7 +12,7 @@ const CreateRoom = () => {
 
   async function sendFile(e) {
     e.preventDefault();
-
+    console.log("Ready State:", dataChannel.current?.readyState);
     if (!dataChannel.current || dataChannel.current.readyState !== "open") {
       alert("Data channel not ready:Reload the page");
       return;
@@ -102,8 +102,9 @@ const CreateRoom = () => {
     });
 
     socket.on("ans", async (ans) => {
-      console.log("answer received in sender");
+      console.log("answer received");
       await peer.current.setRemoteDescription(ans);
+      console.log("Remote description set on sender");
       console.log("connection established");
     });
 
@@ -114,7 +115,9 @@ const CreateRoom = () => {
       dataChannel.current.onopen = () => {
         console.log("data channel open");
       };
+      console.log("Creating offer...");
       let offer = await peer.current.createOffer();
+      console.log("Offer created");
       await peer.current.setLocalDescription(offer);
       console.log("offer:", offer);
 
@@ -149,7 +152,7 @@ const CreateRoom = () => {
     });
 
     peer.current.onconnectionstatechange = () => {
-      console.log(peer.current.connectionState);
+      console.log("Connection:", peer.current.connectionState);
     };
 
     return () => {

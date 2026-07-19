@@ -39,7 +39,7 @@ io.on("connection", (socket) => {
       users: [socket.id],
     };
 
-    console.log("room created");
+    console.log("✅ Room created:", roomID);
     socket.emit("room-created", roomID);
   });
 
@@ -48,7 +48,7 @@ io.on("connection", (socket) => {
       socket.join(roomID);
       rooms[roomID].users.push(socket.id);
 
-      console.log(socket.id + "joint the room");
+      console.log(`✅ ${socket.id} joined room ${roomID}`);
 
       socket.emit("join-successfully");
 
@@ -59,23 +59,21 @@ io.on("connection", (socket) => {
   });
 
   socket.on("offer", ({ roomId, offer }) => {
-    console.log("offer received in backend");
-    console.log(roomId);
+    console.log("📨 Offer received for room:", roomId);
     socket.to(roomId).emit("offer", offer);
   });
 
   socket.on("ans", ({ roomId, ans }) => {
-    console.log("answer received in backend");
-    console.log(roomId);
+    console.log("📨 Answer received for room:", roomId);
     socket.to(roomId).emit("ans", ans);
   });
 
   socket.on("ice-candidate", ({ roomId, candidate }) => {
+    console.log("🧊 ICE Candidate for room:", roomId);
     socket.to(roomId).emit("ice-candidate", candidate);
   });
 });
 
-const PORT =
-  process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => console.log("server started on port 3000"));

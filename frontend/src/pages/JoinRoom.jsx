@@ -6,7 +6,6 @@ import { Download } from "lucide-react";
 const JoinRoom = () => {
   const [code, setCode] = useState("");
   const [receivedFiles, setReceivedFiles] = useState([]);
-  const [receivingProgress, setReceivingProgress] = useState({});
 
   function codeInputField(e) {
     let code = e.target.value;
@@ -38,6 +37,7 @@ const JoinRoom = () => {
 
   useEffect(() => {
     peer.current.ondatachannel = (event) => {
+      console.log("✅ DataChannel received");
       const channel = event.channel;
 
       channel.binaryType = "arraybuffer";
@@ -51,6 +51,7 @@ const JoinRoom = () => {
       };
 
       channel.onmessage = (event) => {
+        console.log("Received:", typeof event.data);
         if (typeof event.data === "string") {
           const parsedData = JSON.parse(event.data);
 
@@ -127,12 +128,16 @@ const JoinRoom = () => {
     socket.on("offer", async (offer) => {
       console.log("offer received");
       await peer.current.setRemoteDescription(offer);
+      console.log("Remote description set on receiver");
 
       let ans = await peer.current.createAnswer();
+      console.log("Answer created");
 
       await peer.current.setLocalDescription(ans);
+      console.log("Local description set");
 
       socket.emit("ans", { roomId: codeRef.current, ans });
+      console.log("Answer sent");
     });
 
     return () => {
@@ -164,7 +169,7 @@ const JoinRoom = () => {
     });
 
     peer.current.onconnectionstatechange = () => {
-      console.log(peer.current.connectionState);
+      console.log("Connection:", peer.current.connectionState);
     };
 
     return () => {
