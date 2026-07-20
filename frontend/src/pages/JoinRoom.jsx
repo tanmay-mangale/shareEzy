@@ -51,71 +51,56 @@ const JoinRoom = () => {
       };
 
       channel.onmessage = (event) => {
-        console.log("Received:", typeof event.data);
-        if (typeof event.data === "string") {
-          const parsedData = JSON.parse(event.data);
+  console.log("Received:", typeof event.data);
+  if (typeof event.data === "string") {
+    const parsedData = JSON.parse(event.data);
 
-          if (parsedData.type === "metadata") {
-            currentFile = {
-              name: parsedData.name,
-              mimeType: parsedData.mimeType,
-              size: parsedData.size,
-              receivedBytes: 0,
-              chunks: [],
-            };
-
-            setReceivedFiles((prev) => [
-              ...prev,
-              {
-                name: currentFile.name,
-                url: "",
-                progress: 0,
-                completed: false,
-              },
-            ]);
-
-            console.log("receiving:", currentFile.name);
-          } else if (parsedData.type === "end") {
-            const blob = new Blob(currentFile.chunks, {
-              type: currentFile.mimeType,
-            });
-
-            const fileURL = URL.createObjectURL(blob);
-
-            setReceivedFiles((prev) =>
-              prev.map((file) =>
-                file.name === currentFile.name
-                  ? {
-                      ...file,
-                      url: fileURL,
-                      progress: 100,
-                      completed: true,
-                    }
-                  : file,
-              ),
-            );
-
-            console.log("received:", currentFile.name);
-          }
-        } else {
-          currentFile.chunks.push(event.data);
-
-          currentFile.receivedBytes += event.data.byteLength;
-
-          const progress = (currentFile.receivedBytes / currentFile.size) * 100;
-
-          setReceivedFiles((prev) =>
-            prev.map((file) =>
-              file.name === currentFile.name
-                ? {
-                    ...file,
-                    progress,
-                  }
-                : file,
-            ),
-          );
-        }
+    if (parsedData.type === "metadata") {
+      currentFile = {
+        name: parsedData.name,
+        mimeType: parsedData.mimeType,
+        size: parsedData.size,
+        receivedBytes: 0,
+        chunks: [],
       };
+
+      setReceivedFiles((prev) => [
+        ...prev,
+        { name: currentFile.name, url: "", progress: 0, completed: false },
+      ]);
+
+      console.log("receiving:", currentFile.name);
+    } else if (parsedData.type === "end") {
+      const finishedFileName = currentFile.name;
+      const blob = new Blob(currentFile.chunks, { type: currentFile.mimeType });
+      const fileURL = URL.createObjectURL(blob);
+
+      setReceivedFiles((prev) =>
+        prev.map((file) =>
+          file.name === finishedFileName
+            ? { ...file, url: fileURL, progress: 100, completed: true }
+            : file,
+        ),
+      );
+
+      channel.send(JSON.stringify({ type: "ack" }));
+
+      currentFile = { name: "", mimeType: "", size: 0, receivedBytes: 0, chunks: [] };
+    }
+  } else {
+    // binary chunk branch — event.data is an ArrayBuffer here
+    currentFile.chunks.push(event.data);
+    currentFile.receivedBytes += event.data.byteLength;
+
+    const progress = (currentFile.receivedBytes / currentFile.size) * 100;
+
+    setReceivedFiles((prev) =>
+      prev.map((file) =>
+        file.name === currentFile.name ? { ...file, progress } : file,
+      ),
+    );
+  }
+};
     };
     socket.on("join-successfully", () => {
       setJoined(true);
