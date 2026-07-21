@@ -111,6 +111,7 @@ const CreateRoom = () => {
     }),
   );
 
+  const pendingCandidates = useRef([]);
   const roomRef = useRef("");
   const dataChannel = useRef(null);
   const [btnText, setBtnText] = useState("Copy");
@@ -138,6 +139,13 @@ const CreateRoom = () => {
     socket.on("ans", async (ans) => {
       console.log("answer received");
       await peer.current.setRemoteDescription(ans);
+      while (pendingCandidates.current.length > 0) {
+        const candidate = pendingCandidates.current.shift();
+
+        await peer.current.addIceCandidate(candidate);
+
+        console.log("Queued ICE added");
+      }
       console.log("Remote description set on sender");
       console.log("connection established");
     });
@@ -205,6 +213,10 @@ const CreateRoom = () => {
       console.log("sender received ice");
       if (peer.current.remoteDescription) {
         await peer.current.addIceCandidate(candidate);
+        console.log("ICE candidate added");
+      } else {
+        console.log("ICE queued");
+        pendingCandidates.current.push(candidate);
       }
     });
 

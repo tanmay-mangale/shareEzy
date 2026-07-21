@@ -33,6 +33,7 @@ const JoinRoom = () => {
     }),
   );
 
+  const pendingCandidates = useRef([]);
   const codeRef = useRef("");
 
   useEffect(() => {
@@ -51,56 +52,69 @@ const JoinRoom = () => {
       };
 
       channel.onmessage = (event) => {
-  console.log("Received:", typeof event.data);
-  if (typeof event.data === "string") {
-    const parsedData = JSON.parse(event.data);
+        console.log("Received:", typeof event.data);
+        if (typeof event.data === "string") {
+          const parsedData = JSON.parse(event.data);
 
-    if (parsedData.type === "metadata") {
-      currentFile = {
-        name: parsedData.name,
-        mimeType: parsedData.mimeType,
-        size: parsedData.size,
-        receivedBytes: 0,
-        chunks: [],
+          if (parsedData.type === "metadata") {
+            currentFile = {
+              name: parsedData.name,
+              mimeType: parsedData.mimeType,
+              size: parsedData.size,
+              receivedBytes: 0,
+              chunks: [],
+            };
+
+            setReceivedFiles((prev) => [
+              ...prev,
+              {
+                name: currentFile.name,
+                url: "",
+                progress: 0,
+                completed: false,
+              },
+            ]);
+
+            console.log("receiving:", currentFile.name);
+          } else if (parsedData.type === "end") {
+            const finishedFileName = currentFile.name;
+            const blob = new Blob(currentFile.chunks, {
+              type: currentFile.mimeType,
+            });
+            const fileURL = URL.createObjectURL(blob);
+
+            setReceivedFiles((prev) =>
+              prev.map((file) =>
+                file.name === finishedFileName
+                  ? { ...file, url: fileURL, progress: 100, completed: true }
+                  : file,
+              ),
+            );
+
+            channel.send(JSON.stringify({ type: "ack" }));
+
+            currentFile = {
+              name: "",
+              mimeType: "",
+              size: 0,
+              receivedBytes: 0,
+              chunks: [],
+            };
+          }
+        } else {
+          // binary chunk branch — event.data is an ArrayBuffer here
+          currentFile.chunks.push(event.data);
+          currentFile.receivedBytes += event.data.byteLength;
+
+          const progress = (currentFile.receivedBytes / currentFile.size) * 100;
+
+          setReceivedFiles((prev) =>
+            prev.map((file) =>
+              file.name === currentFile.name ? { ...file, progress } : file,
+            ),
+          );
+        }
       };
-
-      setReceivedFiles((prev) => [
-        ...prev,
-        { name: currentFile.name, url: "", progress: 0, completed: false },
-      ]);
-
-      console.log("receiving:", currentFile.name);
-    } else if (parsedData.type === "end") {
-      const finishedFileName = currentFile.name;
-      const blob = new Blob(currentFile.chunks, { type: currentFile.mimeType });
-      const fileURL = URL.createObjectURL(blob);
-
-      setReceivedFiles((prev) =>
-        prev.map((file) =>
-          file.name === finishedFileName
-            ? { ...file, url: fileURL, progress: 100, completed: true }
-            : file,
-        ),
-      );
-
-      channel.send(JSON.stringify({ type: "ack" }));
-
-      currentFile = { name: "", mimeType: "", size: 0, receivedBytes: 0, chunks: [] };
-    }
-  } else {
-    // binary chunk branch — event.data is an ArrayBuffer here
-    currentFile.chunks.push(event.data);
-    currentFile.receivedBytes += event.data.byteLength;
-
-    const progress = (currentFile.receivedBytes / currentFile.size) * 100;
-
-    setReceivedFiles((prev) =>
-      prev.map((file) =>
-        file.name === currentFile.name ? { ...file, progress } : file,
-      ),
-    );
-  }
-};
     };
     socket.on("join-successfully", () => {
       setJoined(true);
@@ -113,6 +127,13 @@ const JoinRoom = () => {
     socket.on("offer", async (offer) => {
       console.log("offer received");
       await peer.current.setRemoteDescription(offer);
+      while (pendingCandidates.current.length > 0) {
+        const candidate = pendingCandidates.current.shift();
+
+        await peer.current.addIceCandidate(candidate);
+
+        console.log("Queued ICE added");
+      }
       console.log("Remote description set on receiver");
 
       let ans = await peer.current.createAnswer();
@@ -150,6 +171,10 @@ const JoinRoom = () => {
       console.log("receiver got ice");
       if (peer.current.remoteDescription) {
         await peer.current.addIceCandidate(candidate);
+        console.log("ICE candidate added");
+      } else {
+        console.log("ICE queued");
+        pendingCandidates.current.push(candidate);
       }
     });
 
