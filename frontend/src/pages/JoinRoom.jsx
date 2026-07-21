@@ -157,12 +157,21 @@ const JoinRoom = () => {
     peer.current.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("receiver ice");
+        console.log(event.candidate.candidate);
 
         socket.emit("ice-candidate", {
           roomId: codeRef.current,
           candidate: event.candidate,
         });
       }
+    };
+
+    peer.current.oniceconnectionstatechange = () => {
+      console.log("Receiver ICE State:", peer.current.iceConnectionState);
+    };
+
+    peer.current.onconnectionstatechange = () => {
+      console.log("Receiver Connection State:", peer.current.connectionState);
     };
   }, []);
 

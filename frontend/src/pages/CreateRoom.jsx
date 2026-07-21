@@ -200,11 +200,21 @@ const CreateRoom = () => {
     peer.current.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("sender ice");
+        console.log(event.candidate.candidate);
+
         socket.emit("ice-candidate", {
           roomId: roomRef.current,
           candidate: event.candidate,
         });
       }
+    };
+
+    peer.current.oniceconnectionstatechange = () => {
+      console.log("Sender ICE State:", peer.current.iceConnectionState);
+    };
+
+    peer.current.onconnectionstatechange = () => {
+      console.log("Sender Connection State:", peer.current.connectionState);
     };
   }, []);
 
