@@ -107,6 +107,21 @@ const CreateRoom = () => {
           username: "openrelayproject",
           credential: "openrelayproject",
         },
+        {
+          urls: "turn:openrelay.metered.ca:80?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turns:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
     }),
   );
@@ -301,24 +316,24 @@ const CreateRoom = () => {
               onChange={getFile}
               disabled={!isChannelOpen}
               className="
-                    w-full
-                    text-sm
-                    text-gray-700
-                    rounded-xl
-                    cursor-pointer
-                    bg-white
-                    file:mr-4
-                    file:py-2
-                    file:px-4
-                    file:rounded-lg
-                    file:border-0
-                    file:text-sm
-                    file:font-semibold
-                    file:bg-green-200
-                    file:text-black
-                    hover:file:bg-green-300
-                    p-2
-                "
+                      w-full
+                      text-sm
+                      text-gray-700
+                      rounded-xl
+                      cursor-pointer
+                      bg-white
+                      file:mr-4
+                      file:py-2
+                      file:px-4
+                      file:rounded-lg
+                      file:border-0
+                      file:text-sm
+                      file:font-semibold
+                      file:bg-green-200
+                      file:text-black
+                      hover:file:bg-green-300
+                      p-2
+                  "
               multiple
             />
           </div>
