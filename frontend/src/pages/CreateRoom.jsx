@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { ThreeDots } from "react-loader-spinner";
+import { getParticipantId } from "../utils/participants";
 import socket from "../socket";
 
+
 const CreateRoom = () => {
+  const participantId = useRef(getParticipantId());
   const [files, setFiles] = useState([]);
 
   function getFile(e) {
@@ -144,11 +147,24 @@ const CreateRoom = () => {
   }
 
   useEffect(() => {
-    socket.emit("createRoom");
+    socket.emit("createRoom", { participantId: participantId.current });
 
     socket.on("room-created", (roomId) => {
       setRoomId(roomId);
       roomRef.current = roomId;
+    });
+
+    socket.on("error-message", (msg) => {
+      console.error("server error:", msg);
+      alert(msg);
+    });
+
+    socket.on("peer-disconnected", () => {
+      setConnectionStatus("Receiver Disconnected");
+    });
+
+    socket.on("peer-reconnected", () => {
+      setConnectionStatus("Receiver Connected");
     });
 
     socket.on("ans", async (ans) => {
@@ -208,6 +224,9 @@ const CreateRoom = () => {
       socket.off("offer");
       socket.off("ans");
       socket.off("receiver joined");
+      socket.off("error-message");
+      socket.off("peer-disconnected");
+      socket.off("peer-reconnected");
     };
   }, []);
 
