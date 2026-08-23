@@ -6,7 +6,6 @@ import { Download } from "lucide-react";
 const JoinRoom = () => {
   const [code, setCode] = useState("");
   const [receivedFiles, setReceivedFiles] = useState([]);
-  const [receivingProgress, setReceivingProgress] = useState({});
 
   function codeInputField(e) {
     let code = e.target.value;
@@ -34,10 +33,12 @@ const JoinRoom = () => {
     }),
   );
 
+  const pendingCandidates = useRef([]);
   const codeRef = useRef("");
 
   useEffect(() => {
     peer.current.ondatachannel = (event) => {
+      console.log("✅ DataChannel received");
       const channel = event.channel;
 
       channel.binaryType = "arraybuffer";
@@ -51,6 +52,7 @@ const JoinRoom = () => {
       };
 
       channel.onmessage = (event) => {
+        console.log("Received:", typeof event.data);
         if (typeof event.data === "string") {
           const parsedData = JSON.parse(event.data);
 
@@ -75,42 +77,40 @@ const JoinRoom = () => {
 
             console.log("receiving:", currentFile.name);
           } else if (parsedData.type === "end") {
+            const finishedFileName = currentFile.name;
             const blob = new Blob(currentFile.chunks, {
               type: currentFile.mimeType,
             });
-
             const fileURL = URL.createObjectURL(blob);
 
             setReceivedFiles((prev) =>
               prev.map((file) =>
-                file.name === currentFile.name
-                  ? {
-                      ...file,
-                      url: fileURL,
-                      progress: 100,
-                      completed: true,
-                    }
+                file.name === finishedFileName
+                  ? { ...file, url: fileURL, progress: 100, completed: true }
                   : file,
               ),
             );
 
-            console.log("received:", currentFile.name);
+            channel.send(JSON.stringify({ type: "ack" }));
+
+            currentFile = {
+              name: "",
+              mimeType: "",
+              size: 0,
+              receivedBytes: 0,
+              chunks: [],
+            };
           }
         } else {
+          // binary chunk branch — event.data is an ArrayBuffer here
           currentFile.chunks.push(event.data);
-
           currentFile.receivedBytes += event.data.byteLength;
 
           const progress = (currentFile.receivedBytes / currentFile.size) * 100;
 
           setReceivedFiles((prev) =>
             prev.map((file) =>
-              file.name === currentFile.name
-                ? {
-                    ...file,
-                    progress,
-                  }
-                : file,
+              file.name === currentFile.name ? { ...file, progress } : file,
             ),
           );
         }
@@ -127,12 +127,23 @@ const JoinRoom = () => {
     socket.on("offer", async (offer) => {
       console.log("offer received");
       await peer.current.setRemoteDescription(offer);
+      while (pendingCandidates.current.length > 0) {
+        const candidate = pendingCandidates.current.shift();
+
+        await peer.current.addIceCandidate(candidate);
+
+        console.log("Queued ICE added");
+      }
+      console.log("Remote description set on receiver");
 
       let ans = await peer.current.createAnswer();
+      console.log("Answer created");
 
       await peer.current.setLocalDescription(ans);
+      console.log("Local description set");
 
       socket.emit("ans", { roomId: codeRef.current, ans });
+      console.log("Answer sent");
     });
 
     return () => {
@@ -146,12 +157,21 @@ const JoinRoom = () => {
     peer.current.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("receiver ice");
+        console.log(event.candidate.candidate);
 
         socket.emit("ice-candidate", {
           roomId: codeRef.current,
           candidate: event.candidate,
         });
       }
+    };
+
+    peer.current.oniceconnectionstatechange = () => {
+      console.log("Receiver ICE State:", peer.current.iceConnectionState);
+    };
+
+    peer.current.onconnectionstatechange = () => {
+      console.log("Receiver Connection State:", peer.current.connectionState);
     };
   }, []);
 
@@ -160,11 +180,15 @@ const JoinRoom = () => {
       console.log("receiver got ice");
       if (peer.current.remoteDescription) {
         await peer.current.addIceCandidate(candidate);
+        console.log("ICE candidate added");
+      } else {
+        console.log("ICE queued");
+        pendingCandidates.current.push(candidate);
       }
     });
 
     peer.current.onconnectionstatechange = () => {
-      console.log(peer.current.connectionState);
+      console.log("Connection:", peer.current.connectionState);
     };
 
     return () => {

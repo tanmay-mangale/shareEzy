@@ -10,15 +10,30 @@ const CreateRoom = () => {
     setFiles(selectedFiles);
   }
 
+  let ackResolver = useRef(null);
+
+  function waitForAck() {
+    return new Promise((resolve) => {
+      ackResolver.current = resolve;
+    });
+  }
+
   async function sendFile(e) {
     e.preventDefault();
-
+    console.log("Ready State:", dataChannel.current?.readyState);
     if (!dataChannel.current || dataChannel.current.readyState !== "open") {
-      alert("Data channel not ready:Reload the page");
+      alert("Connection is still being established. Please wait a moment.");
       return;
     }
 
-    const CHUNK_SIZE = 256 * 1024;
+    if (files.length === 0) {
+      alert("Please select at least one file.");
+      return;
+    }
+
+    const CHUNK_SIZE = 64 * 1024;
+    setIsSending(true);
+    setSendProgress(0);
 
     for (const file of files) {
       console.log("sending:", file.name);
@@ -43,9 +58,19 @@ const CreateRoom = () => {
 
         offset += CHUNK_SIZE;
 
+        const progress = Math.min(
+          Math.round((offset / buffer.byteLength) * 100),
+          100,
+        );
+        setSendProgress(progress);
+
         while (dataChannel.current.bufferedAmount > 1024 * 1024) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         }
+      }
+
+      while (dataChannel.current.bufferedAmount > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
       }
 
       dataChannel.current.send(
@@ -56,13 +81,22 @@ const CreateRoom = () => {
 
       console.log("finished:", file.name);
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForAck();
     }
+    setSendProgress(100);
+    setIsSending(false);
+    setFiles([]);
     alert("All files sent successfully");
   }
 
   const [roomId, setRoomId] = useState("");
+  const [isChannelOpen, setIsChannelOpen] = useState(false);
   const [receiverJoined, setReceiverJoined] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState(
+    "Waiting for receiver...",
+  );
+  const [isSending, setIsSending] = useState(false);
+  const [sendProgress, setSendProgress] = useState(0);
 
   const peer = useRef(
     new RTCPeerConnection({
@@ -73,10 +107,26 @@ const CreateRoom = () => {
           username: "openrelayproject",
           credential: "openrelayproject",
         },
+        {
+          urls: "turn:openrelay.metered.ca:80?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turn:openrelay.metered.ca:443",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
+        {
+          urls: "turns:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
     }),
   );
 
+  const pendingCandidates = useRef([]);
   const roomRef = useRef("");
   const dataChannel = useRef(null);
   const [btnText, setBtnText] = useState("Copy");
@@ -102,19 +152,52 @@ const CreateRoom = () => {
     });
 
     socket.on("ans", async (ans) => {
-      console.log("answer received in sender");
+      console.log("answer received");
       await peer.current.setRemoteDescription(ans);
+      while (pendingCandidates.current.length > 0) {
+        const candidate = pendingCandidates.current.shift();
+
+        await peer.current.addIceCandidate(candidate);
+
+        console.log("Queued ICE added");
+      }
+      console.log("Remote description set on sender");
       console.log("connection established");
     });
 
     socket.on("receiver joined", async () => {
+      setConnectionStatus("Connecting...");
       setReceiverJoined(true);
       dataChannel.current = peer.current.createDataChannel("fileTransfer");
 
+      dataChannel.current.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "ack") {
+          console.log("✅ ACK received");
+
+          if (ackResolver.current) {
+            ackResolver.current();
+            ackResolver.current = null;
+          }
+        }
+      };
+
       dataChannel.current.onopen = () => {
         console.log("data channel open");
+        setIsChannelOpen(true);
+        setConnectionStatus("Receiver Connected");
       };
+
+      dataChannel.current.onclose = () => {
+        console.log("Data Channel Closed");
+        setIsChannelOpen(false);
+        setConnectionStatus("Receiver Disconnected");
+      };
+
+      console.log("Creating offer...");
       let offer = await peer.current.createOffer();
+      console.log("Offer created");
       await peer.current.setLocalDescription(offer);
       console.log("offer:", offer);
 
@@ -132,11 +215,21 @@ const CreateRoom = () => {
     peer.current.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("sender ice");
+        console.log(event.candidate.candidate);
+
         socket.emit("ice-candidate", {
           roomId: roomRef.current,
           candidate: event.candidate,
         });
       }
+    };
+
+    peer.current.oniceconnectionstatechange = () => {
+      console.log("Sender ICE State:", peer.current.iceConnectionState);
+    };
+
+    peer.current.onconnectionstatechange = () => {
+      console.log("Sender Connection State:", peer.current.connectionState);
     };
   }, []);
 
@@ -145,11 +238,15 @@ const CreateRoom = () => {
       console.log("sender received ice");
       if (peer.current.remoteDescription) {
         await peer.current.addIceCandidate(candidate);
+        console.log("ICE candidate added");
+      } else {
+        console.log("ICE queued");
+        pendingCandidates.current.push(candidate);
       }
     });
 
     peer.current.onconnectionstatechange = () => {
-      console.log(peer.current.connectionState);
+      console.log("Connection:", peer.current.connectionState);
     };
 
     return () => {
@@ -194,7 +291,20 @@ const CreateRoom = () => {
         className={`text-white h-screen w-full ${receiverJoined ? "flex" : "hidden"} justify-center items-center flex-col`}
       >
         <h1 className="mb-4 text-2xl">(Room ID: {roomId})</h1>
-        <h1 className="text-center text-2xl">Upload Files</h1> <br />
+        <h1
+          className={`text-center text-2xl ${
+            connectionStatus === "Receiver Connected"
+              ? "text-green-400"
+              : connectionStatus === "Connecting..."
+                ? "text-yellow-400"
+                : connectionStatus === "Receiver Disconnected"
+                  ? "text-red-400"
+                  : "text-gray-400"
+          }`}
+        >
+          {connectionStatus}
+        </h1>{" "}
+        <br />
         <form
           action=""
           onSubmit={sendFile}
@@ -204,32 +314,45 @@ const CreateRoom = () => {
             <input
               type="file"
               onChange={getFile}
+              disabled={!isChannelOpen}
               className="
-                    w-full
-                    text-sm
-                    text-gray-700
-                    rounded-xl
-                    cursor-pointer
-                    bg-white
-                    file:mr-4
-                    file:py-2
-                    file:px-4
-                    file:rounded-lg
-                    file:border-0
-                    file:text-sm
-                    file:font-semibold
-                    file:bg-green-200
-                    file:text-black
-                    hover:file:bg-green-300
-                    p-2
-                "
+                      w-full
+                      text-sm
+                      text-gray-700
+                      rounded-xl
+                      cursor-pointer
+                      bg-white
+                      file:mr-4
+                      file:py-2
+                      file:px-4
+                      file:rounded-lg
+                      file:border-0
+                      file:text-sm
+                      file:font-semibold
+                      file:bg-green-200
+                      file:text-black
+                      hover:file:bg-green-300
+                      p-2
+                  "
               multiple
             />
           </div>
           <div>
             <input
               type="submit"
-              className="px-10 py-3 bg-green-300 rounded-xl hover:bg-green-400 hover:cursor-pointer text-black"
+              value={
+                !isChannelOpen
+                  ? "Waiting for Connection..."
+                  : isSending
+                    ? `Sending... ${sendProgress}%`
+                    : "Send Files"
+              }
+              disabled={!isChannelOpen || isSending}
+              className={`px-10 py-3 rounded-xl transition text-black ${
+                !isChannelOpen || isSending
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-300 hover:bg-green-400 cursor-pointer"
+              }`}
             />
           </div>
         </form>
