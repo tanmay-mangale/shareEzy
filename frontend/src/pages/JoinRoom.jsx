@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
-import { ThreeDots } from "react-loader-spinner";
 import socket from "../socket";
 import { Download } from "lucide-react";
+import { getParticipantId } from "../utils/participants";
+
 
 const JoinRoom = () => {
+  const participantId = useRef(getParticipantId());
   const [code, setCode] = useState("");
   const [receivedFiles, setReceivedFiles] = useState([]);
 
@@ -15,7 +17,10 @@ const JoinRoom = () => {
 
   function join(e) {
     e.preventDefault();
-    socket.emit("join-room", code);
+    socket.emit("join-room", {
+      roomId: code,
+      participantId: participantId.current,
+    });
   }
 
   const [joined, setJoined] = useState(false);
@@ -124,6 +129,11 @@ const JoinRoom = () => {
       alert(msg);
     });
 
+    socket.on("error-message", (msg) => {
+      console.error("server error:", msg);
+      alert(msg);
+    });
+
     socket.on("offer", async (offer) => {
       console.log("offer received");
       await peer.current.setRemoteDescription(offer);
@@ -150,6 +160,7 @@ const JoinRoom = () => {
       socket.off("join-successfully");
       socket.off("Room not found");
       socket.off("offer");
+      socket.off("error-message");
     };
   }, []);
 
